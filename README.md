@@ -47,9 +47,6 @@ GKE上でのKubernetes環境での運用を前提とした、フルスタック�
 - **Deployment**: Helm Charts
 - **Monitoring**: Google Cloud Monitoring
 
-### IaC (Infrastructure as Code)
-- **Terraform**: GCP リソース管理
-- **Helm**: Kubernetes アプリケーション管理
 
 ## ディレクトリ構成
 
@@ -136,33 +133,7 @@ cline-meet/
 │   │       └── response.go
 │   └── Dockerfile
 │
-├── infrastructure/                 # IaC & Kubernetes
-│   ├── terraform/                  # Terraform IaC
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   ├── modules/
-│   │   │   ├── gke/
-│   │   │   │   ├── main.tf
-│   │   │   │   ├── variables.tf
-│   │   │   │   └── outputs.tf
-│   │   │   ├── networking/
-│   │   │   │   ├── main.tf
-│   │   │   │   ├── variables.tf
-│   │   │   │   └── outputs.tf
-│   │   │   └── dns/
-│   │   │       ├── main.tf
-│   │   │       ├── variables.tf
-│   │   │       └── outputs.tf
-│   │   └── environments/
-│   │       ├── dev/
-│   │       │   ├── terraform.tfvars
-│   │       │   └── backend.tf
-│   │       └── prod/
-│   │           ├── terraform.tfvars
-│   │           └── backend.tf
-│   │
-│   └── kubernetes/                 # Kubernetes マニフェスト
+├── kubernetes/                     # Kubernetes マニフェスト
 │       ├── helm/                   # Helm Charts
 │       │   ├── cline-meet/
 │       │   │   ├── Chart.yaml
@@ -189,8 +160,7 @@ cline-meet/
 │   └── workflows/
 │       ├── ci.yml                  # CI パイプライン
 │       ├── cd-dev.yml              # 開発環境デプロイ
-│       ├── cd-prod.yml             # 本番環境デプロイ
-│       └── terraform.yml           # インフラ管理
+│       └── cd-prod.yml             # 本番環境デプロイ
 │
 ├── scripts/                        # 開発・運用スクリプト
 │   ├── setup.sh                    # 初期セットアップ
@@ -226,20 +196,20 @@ graph TB
             subgraph "Ingress Layer"
                 LB[LoadBalancer Service]
                 Ingress[Nginx Ingress Controller]
-                CertManager[cert-manager<br/>Let's Encrypt]
+                CertManager[cert-manager Let's Encrypt]
             end
             
             subgraph "Application Layer"
-                Frontend[Frontend Pod<br/>React 19 + Tailwind<br/>shadcn/ui]
-                Backend[Backend Pod<br/>Go + Gin<br/>WebSocket Hub]
+                Frontend[Frontend Pod React 19 + Tailwind shadcn/ui]
+                Backend[Backend Pod Go + Gin WebSocket Hub]
             end
             
             subgraph "Data Layer"
-                Redis[Redis Pod<br/>Session Store<br/>Room Management]
+                Redis[Redis Pod Session Store Room Management]
             end
             
             subgraph "Media Layer"
-                Coturn[coturn Pod<br/>STUN/TURN Server<br/>WebRTC Relay]
+                Coturn[coturn Pod STUN/TURN Server WebRTC Relay]
             end
         end
     end
@@ -249,7 +219,7 @@ graph TB
     ClientN ---|HTTPS/WSS| DNS
     DNS --- LB
     LB --- Ingress
-    CertManager -.->|SSL証明書| Ingress
+    CertManager -.->|SSL Certificate| Ingress
     
     Ingress --- Frontend
     Ingress --- Backend
@@ -259,9 +229,9 @@ graph TB
     Client1 -.->|WebRTC P2P| ClientN
     Client2 -.->|WebRTC P2P| ClientN
     
-    Client1 -.->|STUN/TURN<br/>Fallback| Coturn
-    Client2 -.->|STUN/TURN<br/>Fallback| Coturn
-    ClientN -.->|STUN/TURN<br/>Fallback| Coturn
+    Client1 -.->|STUN/TURN Fallback| Coturn
+    Client2 -.->|STUN/TURN Fallback| Coturn
+    ClientN -.->|STUN/TURN Fallback| Coturn
     
     style Frontend fill:#e1f5fe
     style Backend fill:#f3e5f5
@@ -273,50 +243,50 @@ graph TB
 
 ```mermaid
 sequenceDiagram
-    participant C1 as Client 1<br/>(React App)
-    participant BE as Go Backend<br/>(WebSocket Hub)
-    participant R as Redis<br/>(Session Store)
-    participant C2 as Client 2<br/>(React App)
-    participant TURN as coturn<br/>(STUN/TURN)
+    participant C1 as Client 1
+    participant BE as Go Backend
+    participant R as Redis
+    participant C2 as Client 2
+    participant TURN as coturn
     
-    Note over C1,C2: ルーム参加フェーズ
-    C1->>BE: WebSocket接続
-    BE->>R: セッション保存
-    C1->>BE: join-room イベント
-    BE->>R: ルーム情報更新
+    Note over C1,C2: Room Join Phase
+    C1->>BE: WebSocket Connection
+    BE->>R: Save Session
+    C1->>BE: join-room Event
+    BE->>R: Update Room Info
     
-    C2->>BE: WebSocket接続
-    BE->>R: セッション保存
-    C2->>BE: join-room イベント
-    BE->>R: ルーム情報更新
+    C2->>BE: WebSocket Connection
+    BE->>R: Save Session
+    C2->>BE: join-room Event
+    BE->>R: Update Room Info
     
-    BE->>C1: user-joined イベント
-    BE->>C2: user-joined イベント
+    BE->>C1: user-joined Event
+    BE->>C2: user-joined Event
     
-    Note over C1,C2: WebRTCシグナリングフェーズ
+    Note over C1,C2: WebRTC Signaling Phase
     C1->>BE: WebRTC Offer
-    BE->>C2: Offer転送
+    BE->>C2: Forward Offer
     C2->>BE: WebRTC Answer
-    BE->>C1: Answer転送
+    BE->>C1: Forward Answer
     
     C1->>BE: ICE Candidate
-    BE->>C2: ICE Candidate転送
+    BE->>C2: Forward ICE Candidate
     C2->>BE: ICE Candidate
-    BE->>C1: ICE Candidate転送
+    BE->>C1: Forward ICE Candidate
     
-    Note over C1,C2: 接続確立フェーズ
-    alt P2P接続成功
-        C1<-->C2: 直接WebRTC通信<br/>(音声・映像)
-        Note over C1,C2: 低遅延・高品質通信
-    else P2P接続失敗 (NAT/Firewall)
-        C1<-->TURN: TURN経由通信
-        TURN<-->C2: TURN経由通信
-        Note over C1,TURN,C2: フォールバック通信
+    Note over C1,C2: Connection Establishment
+    alt P2P Connection Success
+        C1<-->C2: Direct WebRTC Communication
+        Note over C1,C2: Low Latency High Quality
+    else P2P Connection Failed
+        C1<-->TURN: TURN Relay Communication
+        TURN<-->C2: TURN Relay Communication
+        Note over C1,TURN,C2: Fallback Communication
     end
     
-    Note over C1,C2: チャット通信
+    Note over C1,C2: Chat Communication
     C1->>BE: send-message
-    BE->>R: メッセージ保存
+    BE->>R: Save Message
     BE->>C2: receive-message
 ```
 
@@ -325,28 +295,28 @@ sequenceDiagram
 ```mermaid
 graph LR
     subgraph "Frontend Layer"
-        UI[UI Components<br/>shadcn/ui + Tailwind]
-        Hooks[Custom Hooks<br/>useWebRTC, useSocket]
-        Context[React Context<br/>Room, Media State]
-        Utils[WebRTC Utils<br/>Simple-peer wrapper]
+        UI[UI Components shadcn/ui + Tailwind]
+        Hooks[Custom Hooks useWebRTC, useSocket]
+        Context[React Context Room, Media State]
+        Utils[WebRTC Utils Simple-peer wrapper]
     end
     
     subgraph "Backend Layer"
-        Router[Gin HTTP Router<br/>REST API]
-        WSHub[WebSocket Hub<br/>Connection Manager]
-        Handlers[Request Handlers<br/>Room, User, WS]
-        Services[Business Logic<br/>Room, Signaling, Chat]
-        Models[Data Models<br/>Room, User, Message]
+        Router[Gin HTTP Router REST API]
+        WSHub[WebSocket Hub Connection Manager]
+        Handlers[Request Handlers Room, User, WS]
+        Services[Business Logic Room, Signaling, Chat]
+        Models[Data Models Room, User, Message]
     end
     
     subgraph "Storage Layer"
-        Redis[(Redis<br/>Session Store<br/>Room State)]
+        Redis[(Redis Session Store Room State)]
     end
     
     subgraph "Media Layer"
-        P2P[WebRTC P2P<br/>Direct Connection]
-        STUN[STUN Server<br/>NAT Traversal]
-        TURN[TURN Server<br/>Relay Fallback]
+        P2P[WebRTC P2P Direct Connection]
+        STUN[STUN Server NAT Traversal]
+        TURN[TURN Server Relay Fallback]
     end
     
     subgraph "External"
@@ -354,34 +324,28 @@ graph LR
         Browser2[Browser 2]
     end
     
-    %% Frontend Internal Flow
     UI --> Hooks
     Hooks --> Context
     Hooks --> Utils
     
-    %% Backend Internal Flow
     Router --> Handlers
     WSHub --> Handlers
     Handlers --> Services
     Services --> Models
     Services --> Redis
     
-    %% Frontend to Backend
     UI <-->|HTTP REST| Router
     Hooks <-->|WebSocket| WSHub
     Utils <-.->|WebRTC Signaling| WSHub
     
-    %% WebRTC Media Flow
     Browser1 <-.->|Media Stream| P2P
     P2P <-.->|Media Stream| Browser2
     
-    %% STUN/TURN Flow
     Browser1 <-.->|ICE Discovery| STUN
     Browser2 <-.->|ICE Discovery| STUN
-    Browser1 <-.->|Relay (Fallback)| TURN
-    TURN <-.->|Relay (Fallback)| Browser2
+    Browser1 <-.->|Relay Fallback| TURN
+    TURN <-.->|Relay Fallback| Browser2
     
-    %% Styling
     style UI fill:#e3f2fd
     style Router fill:#f3e5f5
     style Redis fill:#fff3e0
@@ -409,7 +373,7 @@ graph LR
 - **useSocket**: WebSocket通信フック
 - **useMediaDevices**: メディアデバイス制御フック
 
-### 2. バックエンド (Node.js + Express + Socket.io)
+### 2. バックエンド (Go + Gin + WebSocket)
 
 #### API エンドポイント
 ```
@@ -437,6 +401,7 @@ toggle-audio, toggle-video, media-state-changed
 - **RoomService**: ルーム管理ロジック
 - **SignalingService**: WebRTCシグナリング処理
 - **ChatService**: チャット機能
+- **WebSocketHub**: 接続管理とメッセージ配信
 
 ### 3. インフラストラクチャ
 
@@ -465,7 +430,6 @@ external-ip: <GCP_EXTERNAL_IP>
 1. **CI**: テスト実行、Dockerイメージビルド
 2. **CD (Dev)**: 開発環境自動デプロイ
 3. **CD (Prod)**: 本番環境手動承認デプロイ
-4. **Infrastructure**: Terraform実行
 
 #### デプロイ戦略
 - **Blue-Green Deployment**: 本番環境

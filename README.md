@@ -179,64 +179,16 @@ cline-meet/
 
 ### システム全体構成
 
-```mermaid
-graph TB
-    subgraph "Internet"
-        Client1[Client Browser 1]
-        Client2[Client Browser 2]
-        ClientN[Client Browser N]
-    end
-    
-    subgraph "GCP"
-        subgraph "Cloud DNS"
-            DNS[cline-meet.example.com]
-        end
-        
-        subgraph "GKE Cluster"
-            subgraph "Ingress Layer"
-                LB[LoadBalancer Service]
-                Ingress[Nginx Ingress Controller]
-                CertManager[cert-manager Let's Encrypt]
-            end
-            
-            subgraph "Application Layer"
-                Frontend[Frontend Pod React 19 + Tailwind shadcn/ui]
-                Backend[Backend Pod Go + Gin WebSocket Hub]
-            end
-            
-            subgraph "Data Layer"
-                Redis[Redis Pod Session Store Room Management]
-            end
-            
-            subgraph "Media Layer"
-                Coturn[coturn Pod STUN/TURN Server WebRTC Relay]
-            end
-        end
-    end
-    
-    Client1 ---|HTTPS/WSS| DNS
-    Client2 ---|HTTPS/WSS| DNS
-    ClientN ---|HTTPS/WSS| DNS
-    DNS --- LB
-    LB --- Ingress
-    CertManager -.->|SSL Certificate| Ingress
-    
-    Ingress --- Frontend
-    Ingress --- Backend
-    Backend --- Redis
-    
-    Client1 -.->|WebRTC P2P| Client2
-    Client1 -.->|WebRTC P2P| ClientN
-    Client2 -.->|WebRTC P2P| ClientN
-    
-    Client1 -.->|STUN/TURN Fallback| Coturn
-    Client2 -.->|STUN/TURN Fallback| Coturn
-    ClientN -.->|STUN/TURN Fallback| Coturn
-    
-    style Frontend fill:#e1f5fe
-    style Backend fill:#f3e5f5
-    style Redis fill:#fff3e0
-    style Coturn fill:#e8f5e8
+```
+[Client Browser] 
+    ↕ HTTPS/WSS
+[GCP Load Balancer]
+    ↕
+[GKE Cluster]
+├── [Frontend Pod] (React App)
+├── [Backend Pod] (Node.js + Socket.io)
+├── [Redis Pod] (Session Store)
+└── [coturn Pod] (STUN/TURN Server)
 ```
 
 ### WebRTC通信フロー
@@ -276,12 +228,15 @@ sequenceDiagram
     
     Note over C1,C2: Connection Establishment
     alt P2P Connection Success
-        C1<-->C2: Direct WebRTC Communication
+        C1->>C2: Direct WebRTC Communication
+        C2->>C1: Direct WebRTC Communication
         Note over C1,C2: Low Latency High Quality
     else P2P Connection Failed
-        C1<-->TURN: TURN Relay Communication
-        TURN<-->C2: TURN Relay Communication
-        Note over C1,TURN,C2: Fallback Communication
+        C1->>TURN: TURN Relay Communication
+        TURN->>C2: TURN Relay Communication
+        C2->>TURN: TURN Relay Communication
+        TURN->>C1: TURN Relay Communication
+        Note over TURN: Fallback Communication
     end
     
     Note over C1,C2: Chat Communication
@@ -290,68 +245,20 @@ sequenceDiagram
     BE->>C2: receive-message
 ```
 
+**通信フロー説明:**
+1. **ルーム参加**: クライアントがWebSocketでバックエンドに接続
+2. **シグナリング**: Offer/Answer/ICE Candidateの交換
+3. **P2P接続**: WebRTCによる直接通信確立
+4. **フォールバック**: P2P失敗時はTURNサーバー経由
+
 ### データフロー
 
-```mermaid
-graph LR
-    subgraph "Frontend Layer"
-        UI[UI Components shadcn/ui + Tailwind]
-        Hooks[Custom Hooks useWebRTC, useSocket]
-        Context[React Context Room, Media State]
-        Utils[WebRTC Utils Simple-peer wrapper]
-    end
-    
-    subgraph "Backend Layer"
-        Router[Gin HTTP Router REST API]
-        WSHub[WebSocket Hub Connection Manager]
-        Handlers[Request Handlers Room, User, WS]
-        Services[Business Logic Room, Signaling, Chat]
-        Models[Data Models Room, User, Message]
-    end
-    
-    subgraph "Storage Layer"
-        Redis[(Redis Session Store Room State)]
-    end
-    
-    subgraph "Media Layer"
-        P2P[WebRTC P2P Direct Connection]
-        STUN[STUN Server NAT Traversal]
-        TURN[TURN Server Relay Fallback]
-    end
-    
-    subgraph "External"
-        Browser1[Browser 1]
-        Browser2[Browser 2]
-    end
-    
-    UI --> Hooks
-    Hooks --> Context
-    Hooks --> Utils
-    
-    Router --> Handlers
-    WSHub --> Handlers
-    Handlers --> Services
-    Services --> Models
-    Services --> Redis
-    
-    UI <-->|HTTP REST| Router
-    Hooks <-->|WebSocket| WSHub
-    Utils <-.->|WebRTC Signaling| WSHub
-    
-    Browser1 <-.->|Media Stream| P2P
-    P2P <-.->|Media Stream| Browser2
-    
-    Browser1 <-.->|ICE Discovery| STUN
-    Browser2 <-.->|ICE Discovery| STUN
-    Browser1 <-.->|Relay Fallback| TURN
-    TURN <-.->|Relay Fallback| Browser2
-    
-    style UI fill:#e3f2fd
-    style Router fill:#f3e5f5
-    style Redis fill:#fff3e0
-    style P2P fill:#e8f5e8
-    style STUN fill:#fce4ec
-    style TURN fill:#fce4ec
+```
+[Frontend] ←→ [Backend API] ←→ [Redis]
+     ↕              ↕
+[WebRTC P2P] ←→ [WebSocket] ←→ [Room Management]
+     ↕
+[STUN/TURN Server]
 ```
 
 ## 主要コンポーネント設計
